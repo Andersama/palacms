@@ -1,5 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 // @ts-check
+const archiver = require('archiver');
 
 onBootstrap((e) => {
 	// Some typings for this should be availabe in next Pocketbase update.
@@ -221,6 +222,121 @@ routerAdd('GET', '/_symbols/{filename}', (e) => {
 		reader = fsys.getReader(fileKey)
 		content = toString(reader)
 		return e.blob(200, 'text/javascript', content)
+	} finally {
+		reader?.close()
+		fsys?.close()
+	}
+})
+
+function get_slugged(record, records) {
+	let p = record.get('parent')
+	let s = record.get('site')
+	if (p != null) {
+		for (var r of records) {
+			if (p == r.get('id') && s = r.get('site')) {
+				return get_url(r,records) + record.get('slug')
+			}
+		}
+		return '/' + record.get('slug')
+	}
+	return '/'
+}
+
+routerAdd('GET', '/_download/{filename}', (e) => {
+	if (!e.request) {
+		throw new Error('No request')
+	}
+
+	const siteId = e.request.pathValue('site')
+	let site
+	try {
+		site = $app.findRecordById('sites', siteId)
+	} catch {
+		throw new NotFoundError('Site not found')
+	}
+
+	// Respond with compiled HTML
+	//const fileKey = site.baseFilesPath() + '/' + site.get('preview')
+	const sitename = site.get('name')
+    //get all pages with site
+	let pages
+	try {
+		pages = $app.findAllRecords("pages",
+        	$dbx.exp("LOWER(site) = {:site}", {"site": site})) //urls do not care about casing should assume lowercased*
+    ) catch {
+		throw new NotFoundError('No pages found')
+	}
+
+	//get all symbols with site
+	let symbols
+	try {
+		symbols = $app.findAllRecords("site_symbols",
+			$dbx.exp("LOWER(site) = {:site}", {"site": site})) //urls do not care about casing should assume lowercased*
+	) catch {
+    	throw new NotFoundError('No pages found')
+	}
+
+	let site_uploads
+	let site_upload
+	try  {
+		site_uploads = $app.findRecordsByFilter('site_uploads', `site_uploads.site = {:host} && file = {:file}`, 'id', 1, 0, { host, slug: finalSlug || null })
+		site_upload = site_uploads[0]
+	} catch {
+		site_upload = null
+	}
+	
+	let fsys, reader, content
+	try {
+		fsys = $app.newFilesystem()
+		
+		if (site_upload && site_uplaod.get('updated') > site.get('updated')) { //cached since
+			const filekey = site_upload.baseFilesPath() + '/' + site_upload.get('file')
+			reader = fsys.getReader(filekey)
+			content = toString(reader)
+			return e.blob(200, 'application/zip', content)
+		} else {
+			const archive = archiver('zip', {
+			  zlib: { level: 9 } // Sets the compression level.
+			});
+
+			let uploads = $app.findCollectionByNameOrId("site_uploads")
+			let record = new Record(uploads)
+			record.set("site",sitename)
+			//id,site,file,created,updated
+			let filepath = site.baseFilesPath() + '/' + '_zipped_' + sitename + '.zip'
+			const output = fs.createWriteStream(filepath)
+			//let output = fsys.fileFromPath()
+			archive.pipe(output)
+			
+			for (page in pages) {
+				const fileKey = page.baseFilesPath() + '/' + page.get('compiled_html')
+				let reader = fsys.getReader(fileKey)
+				archive.append(reader, {name: get_slugged(page,pages)+'index.html'})
+				//content = toString(reader)
+			}
+			
+			for (symbol in symbols) {
+				const fileKey = symbol.baseFilesPath() + '/' + symbol.get('compiled_js')
+				let reader = fsys.getReader(fileKey)
+				archive.append(reader, {name: '_symbols/' + symbol.get('id') + '.js'})
+				//content = toString(reader)
+			}
+			
+			archive.finalize()
+			
+			let f1 = $filesystem.fileFromPath(filepath)
+			record.set("file",f1)
+			$app.save(record)
+			//let reader = fsys.getReader()
+			const filekey = record.baseFilesPath() + '/' + record.get('file')
+			reader = fsys.getReader(filekey)
+			content = toString(reader)
+			return e.blob(200, 'application/zip', content)
+		}
+
+		return e.blob(200, 'application/zip', content)
+	} catch {
+		return e.string(404, 'Preview not found')
 	} finally {
 		reader?.close()
 		fsys?.close()
