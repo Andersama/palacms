@@ -242,7 +242,7 @@ function get_slugged(record, records) {
 	return '/'
 }
 
-routerAdd('GET', '/_download/{filename}', (e) => {
+routerAdd('GET', '/_download/{site}', (e) => {
 	if (!e.request) {
 		throw new Error('No request')
 	}
@@ -264,7 +264,7 @@ routerAdd('GET', '/_download/{filename}', (e) => {
 		pages = $app.findAllRecords("pages",
         	$dbx.exp("LOWER(site) = {:site}", {"site": site})) //urls do not care about casing should assume lowercased*
     ) catch {
-		throw new NotFoundError('No pages found')
+		throw new NotFoundError('Site not found')
 	}
 
 	//get all symbols with site
@@ -273,7 +273,7 @@ routerAdd('GET', '/_download/{filename}', (e) => {
 		symbols = $app.findAllRecords("site_symbols",
 			$dbx.exp("LOWER(site) = {:site}", {"site": site})) //urls do not care about casing should assume lowercased*
 	) catch {
-    	throw new NotFoundError('No pages found')
+    	throw new NotFoundError('Site not found')
 	}
 
 	let site_uploads
@@ -336,7 +336,7 @@ routerAdd('GET', '/_download/{filename}', (e) => {
 
 		return e.blob(200, 'application/zip', content)
 	} catch {
-		return e.string(404, 'Preview not found')
+		return e.string(404, 'Site not found')
 	} finally {
 		reader?.close()
 		fsys?.close()
