@@ -61,8 +61,14 @@
 	}
 
 	async function download_site_file() {
-		// TODO: Implement
-		throw new Error('Not implemented')
+		// TODO: Verify
+		if (!current_site) return
+
+		const dl = document.createElement('a');
+		dl.href = `/_download/${current_site.id}`;
+		dl.download = `${current_site.name}.zip`;
+		document.body.appendChild(dl);
+		dl.click();
 	}
 
 	let is_rename_site_open = $state(false)
